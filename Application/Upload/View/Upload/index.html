@@ -1,0 +1,290 @@
+<!--当前文件是webUploader插件demo测试。支持图片和视频上传-->
+<!--API文档链接：http://fex.baidu.com/webuploader/doc/-->
+<!--引入webUploader插件CSS、JS--支持图片和视频上传-->
+<script type="text/javascript" src="/Public/UploadModule/jquery-2.0.3.min.js"></script>
+<link rel="stylesheet" type="text/css" href="/Public/UploadModule/webUploader/webuploader.css">
+<script type="text/javascript" src="/Public/UploadModule/webUploader/webuploader.js"></script>
+
+<style>
+  .uploader-list{max-height: 300px;overflow-y: auto;}
+  .picture_list {overflow: hidden;zoom: 1;}
+  .picture_list li {float: left;margin-right: 15px;margin-bottom: 15px;}
+  .picture_item {border: 1px solid #ddd;}
+  .video_item {width: 200px;padding: 10px;}
+  .picture_action {border-top: 1px solid #ddd;overflow: hidden;zoom: 1;}
+  .picture_action a {width: 50%;float: left;height: 40px;line-height: 40px;text-align: center;color: #888;background: #eee;}
+  .video_item .video_area {margin-top: 5px;height: 150px;background: #333;}
+  select{padding: 7px 10px;border: 1px solid #ccc;padding: 2px 4px;height: 32px;line-height: 32px;width: 160px;background-color: #ffffff;}
+</style>
+
+
+选择上传类型： <select id="uploadType"><option value="1">图片</option><option value="2">视频</option></select>
+<div id="uploader" class="wu-example">
+    <!--用来存放文件信息-->
+    <div id="videoList" class="uploader-list" style="max-height: 300px;overflow-y: auto;">
+        <ul class="picture_list"></ul>
+    </div>
+    <div class="btns videoUploader">
+        <div id="picker" style="display: none">上传视频</div>
+        <div id="filePicker">上传图片</div>
+    </div>
+</div>
+
+
+<script>
+    /**
+     * 图片上传方法
+     * @private
+     */
+    function _imgUploader() {
+        var imgUploader = WebUploader.create({                          //初始化Web Uploader
+            auto: true,                                                 //选完文件后，是否自动上传
+            swf: '/Public/static/webUploader/Uploader.swf',             //swf文件路径
+            server: "{:U('Upload/Upload/upload')}",                     //文件接收服务端
+
+            pick: '#filePicker',                                        //选择文件的按钮。可选。
+                                                                        //内部根据当前运行是创建，可能是input元素，也可能是flash.
+            compress: false,                                            //不压缩
+
+            accept: {                                                   //只允许选择图片文件。
+                title: 'Images',
+                extensions: 'gif,jpg,jpeg,bmp,png',
+                mimeTypes: 'image/*'
+            },
+
+            chunked: true                                               //开启分片上传，网上有的说法大文件上传(超过10M)，会不稳定，把这个设置成true就能解决。
+
+        });
+
+
+        /**
+         * 监听fileQueued事件，通过uploader.makeThumb来创建图片预览图
+         * PS: 这里得到的是Data URL数据，IE6、IE7不支持直接预览。可以借助FLASH或者服务端来完成预览
+         * 现在是自动上传--如果不想选择完图片自动上传，可以在这个方法里面处理缩略图预览
+         * uploader.on( 'fileQueued', function( file ) {});
+         */
+
+
+        /**
+         * 上传完成都分别对应uploadProgress, uploadSuccess, uploadError, uploadComplete事件
+         */
+        imgUploader.on('uploadProgress', function(file) {              //文件上传过程中创建进度条实时显示
+            var imgHtml = $('<li id="' + file.id + '">'+
+                '<div class="picture_item">' +
+                '<div class="video_item">'+
+                '<div class="video_area">'+
+                '</div>'+
+                '</div>'+
+                '<div class="picture_action">'+
+                '<a href="javascript:void(0)" class="look" target="_blank">查看</a>'+
+                '<a href="javascript:;" onclick="deletePic(1,1,this)">删除</a>'+
+                '</div>'+
+                '</div>'+
+                '</li>');
+
+            var thisLi = $('#'+file.id);                               //避免重复添加,上传过程中,这个地方貌似会进来两次
+            if (thisLi.length > 0) return;
+
+            $('#videoList').find('.picture_list').append(imgHtml);
+            uploadSuccess(file.id, '正在上传，请稍等片刻...', 'red');
+        });
+
+        imgUploader.on( 'uploadSuccess', function(file , response) {    //插件上传成功,response:上传接口返回数据
+            //接口上传成功
+            if (typeof response.status != 'undefined' && response.status == 1) {
+                var imgHtml = $('<a href="'+response.data+'" target="_blank"><img style="width:100%;height:100%" src="'+response.data+'"/></a>');
+                var obj = $('#videoList').find('.picture_list').find('#'+file.id);
+                obj.find('.video_area').append(imgHtml);
+                obj.find('a.look').attr('href', response.data);
+                uploadSuccess(file.id, '上传成功！', '#0CC5A7');
+
+            } else {                                                      //接口上传失败
+                uploadSuccess(file.id, '上传失败！', 'red');
+            }
+        });
+
+        imgUploader.on( 'uploadError', function( file ) {                  //插件上传失败
+            uploadSuccess(file.id, '上传失败！', 'red');
+        });
+
+        imgUploader.on( 'uploadComplete', function( file ) {               //完成上传，成功或者失败，先删除进度条
+            $( '#'+file.id ).find('.progress').remove();
+        });
+
+    }
+
+
+    /**
+     * 视频上传方法
+     * @private
+     */
+    function _videoUploader() {
+        var videoUploader = WebUploader.create({                        //初始化Web Uploader
+            auto: true,                                                 //选完文件后，是否自动上传
+            swf: '/Public/static/webUploader/Uploader.swf',             //swf文件路径
+            server: "{:U('upload/Upload/upload')}",                            //文件接收服务端
+
+            pick: '#picker',                                            //选择文件的按钮。可选。
+                                                                        //内部根据当前运行是创建，可能是input元素，也可能是flash.
+            compress: false,                                            //不压缩
+            resize: false,
+
+            accept: {                                                   //只允许选择图片文件。
+                title: 'Images',
+                extensions: '3gp,mp4,rmvb,mov,avi,m4v',
+                mimeTypes:  'video/*,audio/*,application/*'
+            },
+            chunked: true                                               //开启分片上传，网上有的说法大文件上传(超过10M)，会不稳定，把这个设置成true就能解决。
+
+        });
+
+        videoUploader.on( 'uploadProgress', function(file) {            //正在上传
+            var videoList = $('<li id="' + file.id + '">'+
+                '<div class="picture_item">' +
+                '<div class="video_item">'+
+                '<div class="video_area">'+
+                '</div>'+
+                '</div>'+
+                '<div class="picture_action">'+
+                '<a href="javascript:void(0)" class="look" target="_blank">查看</a>'+
+                '<a href="javascript:;" onclick="deletePic(1,1,this)">删除</a>'+
+                '</div>'+
+                '</div>'+
+                '</li>');
+
+            var thisLi = $('#'+file.id);                               //避免重复添加,上传过程中,这个地方貌似会进来两次
+            if (thisLi.length > 0) return;
+
+            $('#videoList').find('.picture_list').append(videoList);
+            uploadSuccess(file.id, '正在上传，请稍等片刻...', 'red');
+        });
+
+
+        /**
+         * 文件上传失败会派送uploadError事件，成功则派送uploadSuccess事件。不管成功或者失败，在文件上传完后都会触发uploadComplete事件
+         * response 图片服务器返回来的数据
+         */
+        videoUploader.on( 'uploadSuccess', function( file ,response) {
+            console.log(file.id)
+            if (typeof response.status != 'undefined' && response.status == 1) {
+                var videoList = $('<video src="'+response.data+'" controls="controls" style="width:100%;height:100%">您的浏览器不支持 video 标签。</video>');
+                var obj = $('#videoList').find('.picture_list').find('#'+file.id);
+                obj.find('.video_area').append(videoList);
+                obj.find('a.look').attr('href', response.data);
+                uploadSuccess(file.id, '上传成功！', '#0CC5A7');
+            } else {
+                uploadSuccess(file.id, '上传失败！', 'red');
+            }
+        });
+
+        videoUploader.on('uploadError', function( file ) {
+            uploadSuccess(file.id, '上传失败！', 'red');
+        });
+
+    }
+
+
+    /**
+     * 上传成功-text=上传成功  color=#0CC5A7
+     * 正在上传-text=正在上传  color=#0CC5A7
+     * 上传失败-text=上传失败  color=red
+     * @param fileId
+     */
+    function uploadSuccess(fileId, text, color){
+        var li = $( '#'+fileId);
+        var success = li.find('div.success');
+        if (!success.length) {
+            success = $('<div class="success"></div>').appendTo( li );
+        }
+        success.html("<font color='"+color+"'>"+text+"</font>");
+        mask_center();
+    }
+
+
+    /**
+     * 切换上传类型
+     */
+    $('#uploadType').change(function(){
+        var type = $(this).val();
+        if (type == 1) {  //图片
+            initImgUpload();
+        } else {          //视频
+            initVideoUpload();
+        }
+    })
+
+    /**
+     * 初始化图片上传
+     */
+    function initImgUpload() {
+        $('#filePicker').show();
+        $('#picker').hide();
+        $('#filePicker').html('上传图片');
+        _imgUploader();
+    }
+
+    /**
+     * 初始化视频上传
+     */
+    function initVideoUpload() {
+        $('#picker').show();
+        $('#filePicker').hide();
+        $('#picker').html('上传视频');
+        _videoUploader();
+    }
+
+    /**
+     * 删除视频/图片
+     * @param _this
+     * @returns {boolean}
+     */
+    function deletePic(id, lid, _this){
+        if(!confirm('确认删除？')) return false;
+        $(_this).parent().parent().parent().remove();
+    }
+
+    /**
+     * 设置图片方块滚动
+     */
+    function mask_center() {
+        var hei1 = '-' + $(".shadow-box").outerHeight() / 2 + 'px';
+        $(".shadow-box").css({
+            "margin-top": hei1
+        });
+
+    }
+
+
+
+    /**
+     * 初始化上传插件-默认选中图片
+     */
+    function initUploadAction() {
+        $('.picture_list').html('');
+        var type = $('#uploadType').val();
+        if (type == 1) {  //图片
+            initImgUpload();
+        } else {          //视频
+            initVideoUpload();
+        }
+    }
+    initUploadAction();
+
+
+    /**
+     * 保存图片/视频链接可以在这里处理
+     */
+    function saveData(){
+        var imgArr = []; //图片/视频集合
+        $('.picture_list').find('li').each(function(){
+            var src = $(this).find('img').attr('src');
+            if (src) {
+                imgArr.push(src);
+            } else {
+                var src = $(this).find('video').attr('src');
+                imgArr.push(src);
+            }
+        })
+    }
+
+</script>
